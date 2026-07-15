@@ -141,6 +141,26 @@ export default function SpeakPage() {
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const latestTranscriptRef = useRef('');
+  const [playing, setPlaying] = useState(false);
+  const synthRef = useRef<SpeechSynthesis | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      synthRef.current = window.speechSynthesis;
+    }
+  }, []);
+
+  const playSentence = useCallback(() => {
+    if (!synthRef.current || playing || !sentence) return;
+    synthRef.current.cancel();
+    const utterance = new SpeechSynthesisUtterance(sentence);
+    utterance.lang = 'en-US';
+    utterance.rate = 0.85;
+    utterance.onstart = () => setPlaying(true);
+    utterance.onend = () => setPlaying(false);
+    utterance.onerror = () => setPlaying(false);
+    synthRef.current.speak(utterance);
+  }, [sentence, playing]);
 
   const correct = feedback === 'perfect' || feedback === 'great';
 
@@ -467,6 +487,17 @@ export default function SpeakPage() {
 
             <div style={styles.cardInner}>
               <p style={styles.sentenceText}>{sentence}</p>
+              <button
+                onClick={playSentence}
+                disabled={loading || playing}
+                style={{
+                  ...styles.playBtn,
+                  opacity: loading ? 0.4 : 1,
+                  animation: playing ? 'pulse-record 1s ease-in-out infinite' : 'none',
+                }}
+              >
+                {playing ? '🔊' : '🔈'}
+              </button>
             </div>
 
             {displayText && (
@@ -655,6 +686,27 @@ const styles: Record<string, React.CSSProperties> = {
   },
   cardInner: {
     marginBottom: 8,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  playBtn: {
+    background: 'none',
+    border: '2px solid #DDD',
+    borderRadius: '50%',
+    width: 44,
+    height: 44,
+    fontSize: 20,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s ease',
+    WebkitTapHighlightColor: 'transparent',
+    touchAction: 'manipulation',
+    flexShrink: 0,
   },
   sentenceText: {
     fontSize: 28,

@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
   try {
     console.time('generate-sentence:total');
 
-    const { history = [] }: { history: HistoryItem[] } = await req.json();
+    const { history = [], topic = '' }: { history: HistoryItem[]; topic?: string } = await req.json();
 
     const recentSentences = history.map(h => h.sentence);
     const recentCorrect = history.filter(h => h.correct).length;
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
       system: `你是一位给 8 岁中国孩子教英语的 AI 老师。
 先分析最近练习记录，然后生成一个句子和配套的 emoji 场景动画。
 
-可用句子的主题：动物、食物、颜色、天气、数字、身体部位、玩具、衣物、水果、交通工具、形状、家人、动作、情感、场所、自然、文具、饮料
+${topic ? `本次课程主题是"${topic}"，所有句子都必须围绕这个主题。` : '可用主题：动物、食物、颜色、天气、数字、身体部位、玩具、衣物、水果、交通工具、形状、家人、动作、情感、场所、自然、文具、饮料'}
 
 场景主题要和句子内容匹配。比如句子说猫，主 emoji 就用猫。`,
       prompt: `## 最近练习过的句子（不要重复）

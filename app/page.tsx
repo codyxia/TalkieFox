@@ -66,6 +66,22 @@ function normalize(text: string): string {
     .trim();
 }
 
+interface WordMatch {
+  word: string;
+  matched: boolean;
+}
+
+function getWordMatches(sentence: string, transcript: string): WordMatch[] {
+  const words = sentence.split(/\s+/).filter(Boolean);
+  const spoken = new Set(
+    transcript.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean),
+  );
+  return words.map((w) => ({
+    word: w,
+    matched: spoken.has(w.toLowerCase().replace(/[^a-z0-9]/g, '')),
+  }));
+}
+
 function wordSimilarity(a: string, b: string): number {
   const wordsA = a.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean);
   const wordsB = b.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean);
@@ -136,6 +152,14 @@ export default function SpeakPage() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [phase, setPhase] = useState<Phase>('idle');
   const [feedback, setFeedback] = useState<FeedbackType>(null);
+  const [wordMatches, setWordMatches] = useState<WordMatch[] | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+    };
+  }, [audioUrl]);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -169,6 +193,8 @@ export default function SpeakPage() {
     setApiError('');
     setDisplayText('');
     setFeedback(null);
+    setWordMatches(null);
+    setAudioUrl(null);
     setScene(null);
     setPhase('idle');
     latestTranscriptRef.current = '';
@@ -226,7 +252,10 @@ export default function SpeakPage() {
         stopMediaTracks();
 
         setPhase('transcribing');
+        setWordMatches(null);
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const url = URL.createObjectURL(audioBlob);
+        setAudioUrl(url);
         const formData = new FormData();
         formData.append('audio', audioBlob, 'recording.webm');
 
@@ -248,6 +277,7 @@ export default function SpeakPage() {
 
           setDisplayText(transcript);
           latestTranscriptRef.current = transcript;
+          setWordMatches(getWordMatches(sentence, transcript));
           setPhase('result');
 
           const normT = normalize(transcript);
@@ -322,6 +352,8 @@ export default function SpeakPage() {
       stopRecording();
     } else {
       setFeedback(null);
+      setWordMatches(null);
+      setAudioUrl(null);
       setDisplayText('');
       latestTranscriptRef.current = '';
       startRecording();
@@ -486,7 +518,25 @@ export default function SpeakPage() {
             <SceneDisplay scene={scene} />
 
             <div style={styles.cardInner}>
-              <p style={styles.sentenceText}>{sentence}</p>
+              <p style={styles.sentenceText}>
+                {wordMatches
+                  ? wordMatches.map((wm, i) => (
+                      <span
+                        key={i}
+                        style={{
+                          color: wm.matched ? '#2E7D32' : '#333',
+                          fontWeight: wm.matched ? 700 : 400,
+                          textDecoration: wm.matched ? 'underline' : 'none',
+                          textDecorationColor: '#4CAF50',
+                          transition: 'all 0.3s ease',
+                        }}
+                      >
+                        {wm.word}
+                        {i < wordMatches.length - 1 ? '\u00A0' : ''}
+                      </span>
+                    ))
+                  : sentence}
+              </p>
               <button
                 onClick={playSentence}
                 disabled={loading || playing}
@@ -495,6 +545,7 @@ export default function SpeakPage() {
                   opacity: loading ? 0.4 : 1,
                   animation: playing ? 'pulse-record 1s ease-in-out infinite' : 'none',
                 }}
+                title="听标准发音"
               >
                 {playing ? '🔊' : '🔈'}
               </button>
@@ -504,6 +555,28 @@ export default function SpeakPage() {
               <div style={styles.transcriptBox}>
                 <span style={styles.transcriptLabel}>🗣 你说的：</span>
                 <span style={styles.transcriptText}>{displayText}</span>
+              </div>
+            )}
+
+            {audioUrl && phase === 'result' && (
+              <div style={styles.playbackRow}>
+                <button
+                  onClick={playSentence}
+                  style={styles.playbackBtn}
+                  title="听标准发音"
+                >
+                  🔊 标准音
+                </button>
+                <button
+                  onClick={() => {
+                    const a = new Audio(audioUrl);
+                    a.play();
+                  }}
+                  style={styles.playbackBtn}
+                  title="听自己的录音"
+                >
+                  ▶ 我的录音
+                </button>
               </div>
             )}
 
@@ -749,6 +822,25 @@ const styles: Record<string, React.CSSProperties> = {
   },
   feedbackText: {
     fontSize: 17,
+  },
+  playbackRow: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 10,
+  },
+  playbackBtn: {
+    padding: '8px 18px',
+    fontSize: 14,
+    fontWeight: 'bold',
+    border: '2px solid #DDD',
+    borderRadius: 20,
+    cursor: 'pointer',
+    backgroundColor: '#fff',
+    color: '#555',
+    transition: 'all 0.2s ease',
+    WebkitTapHighlightColor: 'transparent',
+    touchAction: 'manipulation',
   },
   listenBtn: {
     padding: '16px 44px',
